@@ -493,6 +493,8 @@ handle_reload(struct ubus_context *ctx, struct ubus_object *obj,
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
 
+	ovsd_log_msg(L_NOTICE, "Re-created ovs %s\n", ovs_cfg.name);
+
 	return 0;
 }
 
@@ -561,6 +563,8 @@ handle_free(struct ubus_context *ctx, struct ubus_object *obj,
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
 
+	ovsd_log_msg(L_NOTICE, "deleted ovs '%s'\n", name);
+
 	return 0;
 }
 
@@ -625,6 +629,8 @@ handle_hotplug_add(struct ubus_context *ctx, struct ubus_object *obj,
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
 
+	ovsd_log_msg(L_NOTICE, "ovs '%s': new port '%s'\n", bridge, port);
+
 	return 0;
 }
 
@@ -660,6 +666,7 @@ handle_hotplug_remove(struct ubus_context *ctx, struct ubus_object *obj,
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
 
+	ovsd_log_msg(L_NOTICE, "ovs '%s': removed port '%'\n", bridge, port);
 
 	return 0;
 }
