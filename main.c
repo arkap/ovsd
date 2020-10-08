@@ -52,9 +52,9 @@ usage(const char *progname)
 {
 	fprintf(stderr, "Usage: %s [options]\n"
 		"Options:\n"
-		" -s <path>:		Path to the ubus socket\n"
-		" -l <level>:		Log output level (default: %d)\n"
-		" -S:			Use stderr instead of syslog for log messages\n"
+		" -s <path>:   Path to the ubus socket\n"
+		" -l <level>:  Log output level (default: %d)\n"
+		" -S:          Use stderr instead of syslog for log messages\n"
 		"\n", progname, DEFAULT_LOG_LVL);
 
 	return 1;

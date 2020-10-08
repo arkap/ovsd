@@ -55,8 +55,8 @@ enum ovs_vsctl_cmd {
 	KVOPT_SSL_PROTOCOLS,
 	KVOPT_SSL_CIPHERS,
 
-/* ovs-vsctl allows to combine commands into a single atomic transaction against
- * the database. The individual commands need to be separated by '--'.
+/* ovs-vsctl allows to combine commands into a single atomic transaction
+ * against the database. The individual commands need to be separated by '--'.
  * If options are used for any command, they need to be separated from the
  * global options, too. (e.g. ovs-vsctl -- --if-exists del-br br0). */
 	ATOMIC_CMD_SEPARATOR,
@@ -74,7 +74,7 @@ void ovs_shell_capture_list(const char *cmd, const char *bridge,
 
 bool ovs_shell_br_exists(char *name);
 int ovs_shell_br_to_vlan(char *bridge);
-size_t ovs_shell_br_to_parent(char *bridge, char *buf, size_t n);
+size_t ovs_shell_br_to_parent(char *br, char *buf, size_t n);
 int ovs_shell_create_bridge(struct ovswitch_br_config *cfg);
 int ovs_shell_delete_bridge(char *bridge);
 int ovs_shell_add_port(char *bridge, char *port);

@@ -23,7 +23,6 @@
 #include "ovs.h"
 #include "ubus.h"
 
-#define OFPROTO_MAX 6
 
 struct ubus_context *ubus_ctx = NULL;
 static struct blob_buf bbuf;
@@ -48,8 +47,8 @@ ovsd_add_ubus_object(void)
 	int ret = ubus_add_object(ubus_ctx, &ovsd_obj);
 
 	if (ret) {
-		ovsd_log_msg(L_CRIT, "Failed to register '%s' object with ubus: %s\n",
-			ovsd_obj.name, ubus_strerror(ret));
+		ovsd_log_msg(L_CRIT, "Failed to register '%s' ubus object: "
+		       "%s\n", ovsd_obj.name, ubus_strerror(ret));
 		return ret;
 	}
 	return 0;
@@ -64,21 +63,21 @@ ovsd_ubus_add_fd(void)
 static void
 ovsd_timed_ubus_reconnect(struct uloop_timeout *to)
 {
-	ovsd_log_msg(L_WARNING, "ubus connection lost\n");
-
 	static struct uloop_timeout retry = {
 		.cb = ovsd_timed_ubus_reconnect,
 	};
 	int t = 2;
 
+	ovsd_log_msg(L_WARNING, "ubus connection lost\n");
+
 	if (ubus_reconnect(ubus_ctx, ubus_path) != 0) {
-		ovsd_log_msg(L_WARNING, "ubus reconnect failed, retry in %ds\n", t);
+		ovsd_log_msg(L_WARNING, "ubus reconnect failed, "
+			  "retry in %ds\n", t);
 		uloop_timeout_set(&retry, t * 1000);
 		return;
 	}
 
-	ovsd_log_msg(L_NOTICE, "reconnected to ubus, new id: %08x\n",
-		ubus_ctx->local_id);
+	ovsd_log_msg(L_NOTICE, "reconnected to ubus\n");
 	ovsd_ubus_add_fd();
 }
 
@@ -98,8 +97,7 @@ ovsd_ubus_init(const char *path)
 	if (!ubus_ctx)
 		return -EIO;
 
-	ovsd_log_msg(L_NOTICE, "ubus connection established.\n",
-		ubus_ctx->local_id);
+	ovsd_log_msg(L_NOTICE, "connected to ubus\n");
 	ubus_ctx->connection_lost = ovsd_ubus_connection_lost_cb;
 	ovsd_ubus_add_fd();
 
@@ -178,10 +176,8 @@ static const struct blobmsg_policy create_policy[__CREATPOL_MAX] = {
 	[CREATPOL_SSLPRIVKEY] = { "ssl_private_key", BLOBMSG_TYPE_STRING },
 	[CREATPOL_SSLCERT] = { "ssl_cert", BLOBMSG_TYPE_STRING },
 	[CREATPOL_SSLCACERT] = { "ssl_ca_cert", BLOBMSG_TYPE_STRING },
-	[CREATPOL_BOOTSTRAP_SSLCACERT] = {
-			"ssl_bootstrap_ca_cert",
-			BLOBMSG_TYPE_STRING
-	},
+	[CREATPOL_BOOTSTRAP_SSLCACERT] =
+			{ "ssl_bootstrap_ca_cert",BLOBMSG_TYPE_STRING },
 	[CREATPOL_SSLPROTO] = { "ssl_proto", BLOBMSG_TYPE_ARRAY },
 	[CREATPOL_SSLCIPHERS] = { "ssl_ciphers", BLOBMSG_TYPE_ARRAY },
 };
@@ -248,13 +244,11 @@ static void debug_dump_attr_data(struct blob_attr *msg)
 
 static int
 handle_get_datapath_id(struct ubus_context *ctx, struct ubus_object *obj,
-					   struct ubus_request_data *req,
-					   const char *method,
-					   struct blob_attr *msg)
+		       struct ubus_request_data *req, const char *method,
+		       struct blob_attr *msg)
 {
 	struct blob_attr *tb;
-	char dpid_buf[17], *br = NULL,
-		**br_list = NULL, **dpid_list = NULL;
+	char dpid_buf[17], *br = NULL, **br_list = NULL, **dpid_list = NULL;
 	size_t n;
 	void *cookie;
 	int ret;
@@ -300,19 +294,22 @@ parse_error:
 static int
 parse_ofcontroller_opts(struct blob_attr **tb, struct ovswitch_br_config *cfg)
 {
+	const char *s;
+
 	if (!tb[CREATPOL_OFCONTROLLERS])
 		return 0;
 
 	cfg->ofcontrollers = _parse_strarray(tb[CREATPOL_OFCONTROLLERS],
-										 &cfg->n_ofcontrollers);
+		&cfg->n_ofcontrollers);
 
 	if (!cfg->ofcontrollers)
 		return -1;
 
 	if (tb[CREATPOL_FAILMODE]) {
-		if (!strcmp(blobmsg_get_string(tb[CREATPOL_FAILMODE]), "standalone"))
+		s = blobmsg_get_string(tb[CREATPOL_FAILMODE]);
+		if (!strcmp(s, "standalone"))
 			cfg->fail_mode = OVS_FAIL_MODE_STANDALONE;
-		else if (!strcmp(blobmsg_get_string(tb[CREATPOL_FAILMODE]), "secure"))
+		else if (!strcmp(s, "secure"))
 			cfg->fail_mode = OVS_FAIL_MODE_SECURE;
 		else
 			return -1;
@@ -350,6 +347,7 @@ parse_ofproto_opts(struct blob_attr **tb, struct ovswitch_br_config *cfg)
 
 		ptr += ofp_len;
 	}
+
 	*ptr = '\0';
 	free(arr);
 
@@ -461,28 +459,22 @@ handle_create(struct ubus_context *ctx, struct ubus_object *obj,
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
 
-	return 0;
-}
+	ovsd_log_msg(L_NOTICE, "Created ovs %s\n", ovs_cfg.name);
 
-static int
-handle_configure(struct ubus_context *ctx, struct ubus_object *obj,
-				 struct ubus_request_data *req, const char *method,
-				 struct blob_attr *msg)
-{
 	return 0;
 }
 
 static int
 handle_reload(struct ubus_context *ctx, struct ubus_object *obj,
-			  struct ubus_request_data *req, const char *method,
-			  struct blob_attr *msg)
+	      struct ubus_request_data *req, const char *method,
+	      struct blob_attr *msg)
 {
 	int ret;
 	struct blob_attr *tb[__CREATPOL_MAX];
 	struct ovswitch_br_config ovs_cfg;
 
-	ret = blobmsg_parse(create_policy, __CREATPOL_MAX, tb, blobmsg_data(msg),
-		blobmsg_len(msg));
+	ret = blobmsg_parse(create_policy, __CREATPOL_MAX, tb,
+		blobmsg_data(msg), blobmsg_len(msg));
 	if (ret)
 		return ret;
 
@@ -494,9 +486,6 @@ handle_reload(struct ubus_context *ctx, struct ubus_object *obj,
 
 	ovs_delete(ovs_cfg.name);
 	ret = ovs_create(&ovs_cfg);
-	if (ret)
-		fprintf(stderr, "Failed to re-create '%s': %s\n", ovs_cfg.name,
-				ovs_strerror(ret));
 
 	if (ovs_cfg.ofcontrollers)
 		free(ovs_cfg.ofcontrollers);
@@ -513,15 +502,13 @@ enum {
 };
 
 static struct blobmsg_policy dump_info_policy[__DUMP_INFO_POLICY_MAX] = {
-	[DUMP_INFO_POLICY_NAME] = {
-		.name = "name",
-		.type = BLOBMSG_TYPE_STRING,
-	},
+	[DUMP_INFO_POLICY_NAME] = { "name", BLOBMSG_TYPE_STRING },
 };
 
 static int
 _handle_dump_info(struct ubus_context *ctx, struct ubus_object *obj,
-	struct ubus_request_data *req, const char *method, struct blob_attr *msg)
+		  struct ubus_request_data *req, const char *method,
+		  struct blob_attr *msg)
 {
 	struct blob_attr *tb[__DUMP_INFO_POLICY_MAX];
 
@@ -535,10 +522,12 @@ _handle_dump_info(struct ubus_context *ctx, struct ubus_object *obj,
 	return 0;
 }
 
+static const struct blobmsg_policy no_policy[] = {};
+
 static int
 __no_handler(struct ubus_context *ctx, struct ubus_object *obj,
-				  struct ubus_request_data *req, const char *method,
-				  struct blob_attr *msg)
+	     struct ubus_request_data *req, const char *method,
+	     struct blob_attr *msg)
 {
 	return 0;
 }
@@ -553,9 +542,11 @@ static const struct blobmsg_policy delete_policy[__DELPOL_MAX] = {
 
 static int
 handle_free(struct ubus_context *ctx, struct ubus_object *obj,
-			struct ubus_request_data *req, const char *method, struct blob_attr *msg)
+	    struct ubus_request_data *req, const char *method,
+	    struct blob_attr *msg)
 {
 	struct blob_attr *tb[__DELPOL_MAX];
+	char *name;
 	int ret;
 
 	blobmsg_parse(delete_policy, __DELPOL_MAX, tb, blobmsg_data(msg),
@@ -564,7 +555,8 @@ handle_free(struct ubus_context *ctx, struct ubus_object *obj,
 	if (!tb[DELPOL_NAME])
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
-	ret = ovs_delete(blobmsg_get_string(tb[DELPOL_NAME]));
+	name = blobmsg_get_string(tb[DELPOL_NAME]);
+	ret = ovs_delete(name);
 
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
@@ -578,16 +570,13 @@ enum {
 };
 
 static struct blobmsg_policy check_state_policy[__CHECK_STATE_POLICY_MAX] = {
-	[CHECK_STATE_POLICY_NAME] = {
-			.name = "name",
-			.type = BLOBMSG_TYPE_STRING
-	},
+	[CHECK_STATE_POLICY_NAME] = { "name", BLOBMSG_TYPE_STRING },
 };
 
 static int
 handle_check_state(struct ubus_context *ctx, struct ubus_object *obj,
-				   struct ubus_request_data *req, const char *method,
-				   struct blob_attr *msg)
+		   struct ubus_request_data *req, const char *method,
+		   struct blob_attr *msg)
 {
 	struct blob_attr *tb[__CHECK_STATE_POLICY_MAX];
 
@@ -616,10 +605,11 @@ static const struct blobmsg_policy hotplug_add_policy[__ADDPOL_MAX] = {
 
 static int
 handle_hotplug_add(struct ubus_context *ctx, struct ubus_object *obj,
-				struct ubus_request_data *req, const char *method,
-				struct blob_attr *msg)
+		   struct ubus_request_data *req, const char *method,
+		   struct blob_attr *msg)
 {
 	struct blob_attr *tb[__ADDPOL_MAX];
+	char *bridge, *port;
 	int ret;
 
 	blobmsg_parse(hotplug_add_policy, __ADDPOL_MAX, tb,
@@ -628,8 +618,9 @@ handle_hotplug_add(struct ubus_context *ctx, struct ubus_object *obj,
 	if (!tb[ADDPOL_BRIDGE] || !tb[ADDPOL_MEMBER])
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
-	ret = ovs_add_port(blobmsg_get_string(tb[ADDPOL_BRIDGE]),
-		blobmsg_get_string(tb[ADDPOL_MEMBER]));
+	bridge = blobmsg_get_string(tb[ADDPOL_BRIDGE]);
+	port = blobmsg_get_string(tb[ADDPOL_MEMBER]);
+	ret = ovs_add_port(bridge, port);
 
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
@@ -649,10 +640,11 @@ static const struct blobmsg_policy hotplug_del_policy[__RMPOL_MAX] = {
 
 static int
 handle_hotplug_remove(struct ubus_context *ctx, struct ubus_object *obj,
-					  struct ubus_request_data *req, const char *method,
-					  struct blob_attr *msg)
+		      struct ubus_request_data *req, const char *method,
+		      struct blob_attr *msg)
 {
 	struct blob_attr *tb[__RMPOL_MAX];
+	char *bridge, *port;
 	int ret;
 
 	blobmsg_parse(hotplug_del_policy, __RMPOL_MAX, tb,
@@ -661,29 +653,14 @@ handle_hotplug_remove(struct ubus_context *ctx, struct ubus_object *obj,
 	if (!tb[RMPOL_BRIDGE] || !tb[RMPOL_MEMBER])
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
-	ret = ovs_remove_port(blobmsg_get_string(tb[RMPOL_BRIDGE]),
-		blobmsg_get_string(tb[RMPOL_MEMBER]));
+	bridge = blobmsg_get_string(tb[RMPOL_BRIDGE]);
+	port = blobmsg_get_string(tb[RMPOL_MEMBER]);
 
+	ret = ovs_remove_port(bridge, port);
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
 
-	return 0;
-}
 
-enum {
-	PREPPOL_NAME,
-	__PREPPOL_MAX
-};
-
-static const struct blobmsg_policy hotplug_prep_policy[__PREPPOL_MAX] = {
-	[PREPPOL_NAME] = { "name", BLOBMSG_TYPE_STRING },
-};
-
-static int
-handle_hotplug_prepare(struct ubus_context *ctx, struct ubus_object *obj,
-					   struct ubus_request_data *req, const char *method,
-					   struct blob_attr *msg)
-{
 	return 0;
 }
 
@@ -705,20 +682,21 @@ static struct ubus_method ubus_methods[__METHODS_MAX] = {
 	[METHOD_GET_DATAPATH_ID] = UBUS_METHOD("get_datapath_id",
 		handle_get_datapath_id, get_dpid_policy),
 	[METHOD_CREATE] = UBUS_METHOD("create", handle_create, create_policy),
-	[METHOD_CONFIG_INIT] = UBUS_METHOD_NOARG("configure", handle_configure),
+	[METHOD_CONFIG_INIT] = UBUS_METHOD("configure", __no_handler,
+		no_policy),
 	[METHOD_RELOAD] = UBUS_METHOD("reload", handle_reload, create_policy),
 	[METHOD_DUMP_INFO] = UBUS_METHOD("dump_info", _handle_dump_info,
 		dump_info_policy),
 	[METHOD_DUMP_STATS] = UBUS_METHOD_NOARG("dump_stats", __no_handler),
 	[METHOD_CHECK_STATE] = UBUS_METHOD("check_state", handle_check_state,
-									   check_state_policy),
+		check_state_policy),
 	[METHOD_FREE] = UBUS_METHOD("free", handle_free, delete_policy),
 	[METHOD_HOTPLUG_ADD] = UBUS_METHOD("add", handle_hotplug_add,
-									   hotplug_add_policy),
+		hotplug_add_policy),
 	[METHOD_HOTPLUG_REMOVE] = UBUS_METHOD("remove", handle_hotplug_remove,
-										  hotplug_del_policy),
-	[METHOD_HOTPLUG_PREPARE] = UBUS_METHOD("prepare", handle_hotplug_prepare,
-										   hotplug_prep_policy),
+		hotplug_del_policy),
+	[METHOD_HOTPLUG_PREPARE] = UBUS_METHOD("prepare", __no_handler,
+		no_policy),
 };
 
 static struct ubus_object_type ovsd_obj_type =

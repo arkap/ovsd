@@ -50,8 +50,8 @@ ovs_remove_port(char *bridge, char *port)
 {
 	int ret = ovs_shell_remove_port(bridge, port);
 	if (ret)
-		ovsd_log_msg(L_WARNING, "'%s' failed to remove port '%s': %s\n",
-				bridge, port, ovs_strerror(ret));
+		ovsd_log_msg(L_WARNING, "'%s' failed to remove port '%s': "
+			  "%s\n", bridge, port, ovs_strerror(ret));
 
 	return ret;
 }
@@ -68,7 +68,7 @@ ovs_check_state(char *bridge)
 int
 ovs_dump_info(struct blob_buf *buf, char *bridge)
 {
-	char out_buf[64];
+	char out[64];
 	int vlan_tag;
 
 	ovs_shell_capture_list(ovs_cmd(CMD_GET_SSL), NULL, "ssl", buf, true);
@@ -79,8 +79,8 @@ ovs_dump_info(struct blob_buf *buf, char *bridge)
 	if (!ovs_shell_br_exists(bridge))
 		return OVSD_ENOEXIST;
 
-	if (ovs_shell_br_to_parent(bridge, out_buf, 64) && strcmp(out_buf, bridge))
-		blobmsg_add_string(buf, "parent", out_buf);
+	if (ovs_shell_br_to_parent(bridge, out, 64) && strcmp(out, bridge))
+		blobmsg_add_string(buf, "parent", out);
 
 
 	vlan_tag = ovs_shell_br_to_vlan(bridge);
@@ -101,17 +101,12 @@ const char*
 ovs_strerror(int error)
 {
 	switch (error) {
-		case OVSD_ENOEXIST:
-			return "does not exist";
-		case OVSD_EINVALID_ARG:
-			return "invalid argument";
-		case OVSD_ENOPARENT:
-			return "parent does not exist";
-		case OVSD_EINVALID_VLAN:
-			return "invalid VLAN tag";
-		case OVSD_EUNKNOWN:
-		default:
-			return "unknown error";
+		case OVSD_ENOEXIST: return "does not exist";
+		case OVSD_EINVALID_ARG: return "invalid argument";
+		case OVSD_ENOPARENT: return "parent does not exist";
+		case OVSD_EINVALID_VLAN: return "invalid VLAN tag";
+		case OVSD_EUNKNOWN: /* fall-through */
+		default: return "unknown error";
 	}
 }
 
@@ -121,7 +116,7 @@ ovs_get_datapath_id(char *bridge, char *dpid)
 	int ret = ovs_shell_get_datapath_id(bridge, dpid);
 	if (ret)
 		ovsd_log_msg(L_DEBUG, "Failed to get datapath ID for %s: "
-						"%s\n", bridge, ovs_strerror(ret));
+			"%s\n", bridge, ovs_strerror(ret));
 	return ret;
 }
 
@@ -131,6 +126,6 @@ ovs_get_bridges(char ***br_buf, char ***dpid_buf, size_t *n)
 	int ret = ovs_shell_get_bridges(br_buf, dpid_buf, n);
 	if (ret)
 		ovsd_log_msg(L_DEBUG, "Failed to retrieve ovs bridges: "
-							  "%s\n", ovs_strerror(ret));
+			"%s\n", ovs_strerror(ret));
 	return ret;
 }

@@ -78,7 +78,7 @@ static char * const ovs_vsctl_cmd[__CMD_MAX] = {
 	[KVOPT_SSL_PROTOCOLS]				= "--ssl-protocols",
 	[KVOPT_SSL_CIPHERS]				= "--ssl-ciphers",
 
-	[ATOMIC_CMD_SEPARATOR]			= "--",
+	[ATOMIC_CMD_SEPARATOR]				= "--",
 };
 
 
@@ -125,8 +125,14 @@ ovs_vsctl(char * const *argv)
 	if (pid < 0) {
 		rc = -1;
 	} else {
-		while ((rc = waitpid(pid, &status, 0)) == -1 && errno == EINTR);
-		rc = (rc == pid && WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
+		do {
+			rc = waitpid(pid, &status, 0);
+		} while (rc == -1 && errno == EINTR);
+
+		if (rc == pid && WIFEXITED(status))
+			rc = WEXITSTATUS(status);
+		else
+			rc = -1;
 	}
 	return rc;
 }
@@ -174,20 +180,16 @@ _strip(char *str)
 static void
 _lowercase(char *str)
 {
-	while (*str != '\0') {
+	for (; *str != '\0'; str++)
 		*str = (char) tolower(*str);
-		str++;
-	}
 }
 
 static void
 _replace(char *str, char c, char other)
 {
-	while (*str != '\0') {
+	for (; *str != '\0'; str++)
 		if (*str == c)
 			*str = other;
-		str++;
-	}
 }
 
 static char *
@@ -207,8 +209,8 @@ sanitize(char *str)
 }
 
 void
-ovs_shell_capture_string(const char *cmd, const char *bridge,
-		const char *name, struct blob_buf *buf)
+ovs_shell_capture_string(const char *cmd, const char *bridge, const char *name,
+			 struct blob_buf *buf)
 {
 	char output[256];
 	FILE *f;
@@ -235,9 +237,9 @@ done:
 
 void
 ovs_shell_capture_list(const char *cmd, const char *bridge,
-	const char *list_name, struct blob_buf *buf, bool table)
+		       const char *list_name, struct blob_buf *buf, bool table)
 {
-	char *tmp, output[512];
+	char *tmp, out[512];
 	FILE *f;
 	void *list;
 	size_t cmd_len;
@@ -260,12 +262,12 @@ ovs_shell_capture_list(const char *cmd, const char *bridge,
 	else
 		list = blobmsg_open_array(buf, list_name);
 
-	while (fgets(output, 512, f) != NULL) {
-		if (table && (tmp = strchr(output, ':'))) {
+	while (fgets(out, 512, f) != NULL) {
+		if (table && (tmp = strchr(out, ':'))) {
 			*tmp++ = '\0';
-			blobmsg_add_string(buf, sanitize(output), sanitize(tmp));
+			blobmsg_add_string(buf, sanitize(out), sanitize(tmp));
 		} else {
-			blobmsg_add_string(buf, NULL, sanitize(output));
+			blobmsg_add_string(buf, NULL, sanitize(out));
 		}
 	}
 
@@ -325,8 +327,9 @@ ovs_shell_get_datapath_id(char *bridge, char *dpid)
 	size_t pos = 0;
 	char c;
 
-	sprintf(cmdbuf, "%s %s %s %s %s", OVS_VSCTL, ovs_vsctl_cmd[CMD_GET_TBL],
-			ovs_table[TABLE_BRIDGE], bridge, ovs_record[RECORD_DATAPATH_ID]);
+	sprintf(cmdbuf, "%s %s %s %s %s", OVS_VSCTL,
+		ovs_vsctl_cmd[CMD_GET_TBL], ovs_table[TABLE_BRIDGE], bridge,
+		ovs_record[RECORD_DATAPATH_ID]);
 
 	if ((f = popen(cmdbuf, "r")) == NULL)
 		return -1;
@@ -436,60 +439,71 @@ ovs_shell_br_to_vlan(char *bridge)
 }
 
 size_t
-ovs_shell_br_to_parent(char *bridge, char *buf, size_t n)
+ovs_shell_br_to_parent(char *br, char *buf, size_t n)
 {
-	char out_buf[64];
+	char out[64];
+	int ret;
 
-	if (!ovs_shell_br_exists(bridge))
+	if (!ovs_shell_br_exists(br))
 		return 0;
 
-	if (_ovs_shell_get_output(ovs_cmd(CMD_BR_TO_PARENT), bridge, out_buf, 64))
+	ret = _ovs_shell_get_output(ovs_cmd(CMD_BR_TO_PARENT), br, out, 64);
+	if (ret)
 		return 0;
 
-	sanitize(out_buf);
-	strncpy(buf, out_buf, n);
-	return strnlen(out_buf, 64);
+	sanitize(out);
+	strncpy(buf, out, n);
+	return strnlen(out, 64);
 }
 
 int
 ovs_shell_create_bridge(struct ovswitch_br_config *cfg)
 {
 	bool fake_br = false;
-	size_t ovs_vsctl_nargs = 2;	/* program name and terminating NULL */
-	size_t cur_arg;
+	size_t nargs = 2;	/* program name and terminating NULL */
+	size_t cur;
 
 	/* 1: add-br 2: --may-exist 3: br-name */
-	ovs_vsctl_nargs += 3;
+	nargs += 3;
 
 	/* in case of fake bridge, check args */
 	if (cfg->parent && (cfg->vlan_tag >= 0)) {
 
 		/* check 802.1q compliance */
-		if (cfg->vlan_tag > 0 && ((cfg->vlan_tag & VLAN_TAG_MASK) == 0xfff))
+		if (cfg->vlan_tag > 0 &&
+		((cfg->vlan_tag & VLAN_TAG_MASK) == 0xfff))
 			return OVSD_EINVALID_VLAN;
 
 		/* check if parent bridge exists */
 		if (!ovs_shell_br_exists(cfg->parent))
 			return OVSD_ENOPARENT;
 
-		ovs_vsctl_nargs += 2;
+		nargs += 2;
 		fake_br = true;
 	}
 
 	/* 1: atomic cmd separator, 2: set-controller cmd,
 	 * 3: bridge, 4...: controllers */
 	if (!fake_br && cfg->ofcontrollers) {
-		ovs_vsctl_nargs += 3 + cfg->n_ofcontrollers;
-		/* 1: atomic cmd separator, 2: set-fail-mode, 3: bridge, 4: fail-mode */
-		ovs_vsctl_nargs += 4;
+		nargs += 3 + cfg->n_ofcontrollers;
+		/* 1: separator
+		 * 2: set-fail-mode
+		 * 3: bridge
+		 * 4: fail-mode */
+		nargs += 4;
 
 		/* SSL options: 5 or 6 options
-		 * separator, (--bootstrap), set-ssl, private key, cert, CA cert */
+		 * separator
+		 * (--bootstrap)
+		 * set-ssl
+		 * private key
+		 * cert
+		 * CA cert */
 		if (cfg->ssl.privkey_file) {
 			if (cfg->ssl.bootstrap)
-				ovs_vsctl_nargs += 6;
+				nargs += 6;
 			else
-				ovs_vsctl_nargs += 5;
+				nargs += 5;
 		}
 	}
 
@@ -499,77 +513,77 @@ ovs_shell_create_bridge(struct ovswitch_br_config *cfg)
 	 * 4: bridge name
 	 * 5: protocols= */
 	if (cfg->ofproto)
-		ovs_vsctl_nargs += 5;
+		nargs += 5;
 
 	/* build argv for ovs-vsctl */
-	char *ovs_vsctl_argv[ovs_vsctl_nargs];
+	char *argv[nargs];
 
-	cur_arg = 0;
+	cur = 0;
 
 	/* program name */
-	ovs_vsctl_argv[cur_arg++] = OVS_VSCTL;
+	argv[cur++] = OVS_VSCTL;
 
 	/* create bridge command with --may-exist */
-	ovs_vsctl_argv[cur_arg++] = ovs_cmd(OPT_MAY_EXIST);
-	ovs_vsctl_argv[cur_arg++] = ovs_cmd(CMD_CREATE_BR);
+	argv[cur++] = ovs_cmd(OPT_MAY_EXIST);
+	argv[cur++] = ovs_cmd(CMD_CREATE_BR);
 
 	/* bridge name */
-	ovs_vsctl_argv[cur_arg++] = cfg->name;
+	argv[cur++] = cfg->name;
 
 	/* fake bridge parameters */
 	if (fake_br) {
-		ovs_vsctl_argv[cur_arg++] = cfg->parent;
-		ovs_vsctl_argv[cur_arg] = alloca(6 * sizeof(char));
-		sprintf(ovs_vsctl_argv[cur_arg++], "%hu",
-				(uint16_t) cfg->vlan_tag);
+		argv[cur++] = cfg->parent;
+		argv[cur] = alloca(6 * sizeof(char));
+		sprintf(argv[cur++], "%hu",
+			(uint16_t) cfg->vlan_tag);
 	} else if (cfg->ofcontrollers) {
-		ovs_vsctl_argv[cur_arg++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
-		ovs_vsctl_argv[cur_arg++] = ovs_cmd(CMD_SET_OFCTL);
-		ovs_vsctl_argv[cur_arg++] = cfg->name;
+		argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+		argv[cur++] = ovs_cmd(CMD_SET_OFCTL);
+		argv[cur++] = cfg->name;
 		for (int i = 0; i < cfg->n_ofcontrollers; i++)
-			ovs_vsctl_argv[cur_arg++] = cfg->ofcontrollers[i];
+			argv[cur++] = cfg->ofcontrollers[i];
 
 		/* fail mode in case of OF controller unavailability */
 		switch (cfg->fail_mode) {
 			case OVS_FAIL_MODE_SECURE:
-				ovs_vsctl_argv[cur_arg++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
-				ovs_vsctl_argv[cur_arg++] = ovs_cmd(CMD_SET_FAIL_MODE);
-				ovs_vsctl_argv[cur_arg++] = cfg->name;
-				ovs_vsctl_argv[cur_arg++] = "secure";
+				argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+				argv[cur++] = ovs_cmd(CMD_SET_FAIL_MODE);
+				argv[cur++] = cfg->name;
+				argv[cur++] = "secure";
 				break;
 			case OVS_FAIL_MODE_STANDALONE:
-				ovs_vsctl_argv[cur_arg++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
-				ovs_vsctl_argv[cur_arg++] = ovs_cmd(CMD_SET_FAIL_MODE);
-				ovs_vsctl_argv[cur_arg++] = cfg->name;
-				ovs_vsctl_argv[cur_arg++] = "standalone";
+				argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+				argv[cur++] = ovs_cmd(CMD_SET_FAIL_MODE);
+				argv[cur++] = cfg->name;
+				argv[cur++] = "standalone";
 				break;
 			default: break;
 		}
 
 		/* SSL options */
 		if (cfg->ssl.privkey_file) {
-			ovs_vsctl_argv[cur_arg++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+			argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
 			if (cfg->ssl.bootstrap)
-				ovs_vsctl_argv[cur_arg++] = ovs_cmd(OPT_SSL_BOOTSTRAP);
-			ovs_vsctl_argv[cur_arg++] = ovs_cmd(CMD_SET_SSL);
-			ovs_vsctl_argv[cur_arg++] = cfg->ssl.privkey_file;
-			ovs_vsctl_argv[cur_arg++] = cfg->ssl.cert_file;
-			ovs_vsctl_argv[cur_arg++] = cfg->ssl.cacert_file;
+				argv[cur++] = ovs_cmd(OPT_SSL_BOOTSTRAP);
+			argv[cur++] = ovs_cmd(CMD_SET_SSL);
+			argv[cur++] = cfg->ssl.privkey_file;
+			argv[cur++] = cfg->ssl.cert_file;
+			argv[cur++] = cfg->ssl.cacert_file;
 		}
 
 		/* OpenFlow protocol version */
 		if (cfg->ofproto) {
-			ovs_vsctl_argv[cur_arg++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
-			ovs_vsctl_argv[cur_arg++] = ovs_cmd(CMD_SET_TBL);
-			ovs_vsctl_argv[cur_arg++] = "bridge";
-			ovs_vsctl_argv[cur_arg++] = cfg->name;
-			ovs_vsctl_argv[cur_arg++] = cfg->ofproto;
+			argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+			argv[cur++] = ovs_cmd(CMD_SET_TBL);
+			argv[cur++] = "bridge";
+			argv[cur++] = cfg->name;
+			argv[cur++] = cfg->ofproto;
 		}
 	}
 
-	ovs_vsctl_argv[cur_arg] = NULL;
+	argv[cur] = NULL;
 
-	return ovs_vsctl(ovs_vsctl_argv);
+	return ovs_vsctl(argv);
 }
 
 int
