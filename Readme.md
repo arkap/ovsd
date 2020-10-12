@@ -1,8 +1,8 @@
 # ovsd
 
-ovsd is a daemon providing external device handler functionality for Open vSwitch devices in conjunction with netifd.
-It allows to integrate Open vSwitch configuration into the network interface configuration file `/etc/config/network` in the OpenWRT/LEDE router operating system. 
-Using the netifd external device handler extension, it receives commands to create and configure Open vSwitch devices from netifd and relays them to the Open vSwitch software using the ovs-vsctl command-line interface.
+ovsd is an external device handler for Open vSwitch devices in conjunction with OpenWrt's netifd.
+It integrates Open vSwitch configuration into the UCI configuration file `/etc/config/network`.
+Using the external device handler extension for netifd, it receives commands to create and configure Open vSwitch devices from netifd and relays them to the Open vSwitch software using the `ovs-vsctl` command-line interface.
 
 ## Installation
 
@@ -13,10 +13,9 @@ src-git sdwn git@gitlab.hhi.fraunhofer.de:wn-ina/sdwn-feed.git
 ```
 and running
 ```bash
-scripts/feeds update sdwn
-scripts/feeds install ovsd
+scripts/feeds update sdwn && scripts/feeds install ovsd
 ```
-from the same directory. There should now be a submenu called `SDWN` under `Network` when you run
+There should now be a submenu called `SDWN` under `Network` when you run
 `make menuconfig` where you can select `ovsd`.
 
 ## Configuration
