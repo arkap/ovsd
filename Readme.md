@@ -44,7 +44,7 @@ config interface 'lan'
 
 config interface 'fake'
 	option type 'ovs'
-    option ifname 'eth1 eth2'
+	option ifname 'eth1 eth2'
 	option proto 'static'
 	option ipaddr '172.17.1.124'
 	option netmask '255.255.255.0'
