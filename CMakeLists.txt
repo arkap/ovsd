@@ -14,7 +14,7 @@ SET(SOURCES
 	main.c ovs.c ubus.c ovs-shell.c)
 
 SET(LIBS
-	ubox ubus)
+	ubox ubus uci)
 
 IF(DEBUG)
   ADD_DEFINITIONS(-DDEBUG -g3)

@@ -19,6 +19,7 @@
 
 #include <libubox/utils.h>
 #include <libubus.h>
+#include <uci_blob.h>
 
 #include "ovs.h"
 #include "ubus.h"
@@ -410,7 +411,7 @@ static int
 parse_create_msg(struct blob_attr **tb, struct ovswitch_br_config *cfg)
 {
 	if (!tb[CREATPOL_BRIDGE])
-		return OVSD_EINVALID_ARG;
+		return UBUS_STATUS_INVALID_ARGUMENT;
 	cfg->name = blobmsg_get_string(tb[CREATPOL_BRIDGE]);
 
 	if (tb[CREATPOL_PARENT] && tb[CREATPOL_VLAN]) {
@@ -465,37 +466,80 @@ handle_create(struct ubus_context *ctx, struct ubus_object *obj,
 }
 
 static int
-handle_reload(struct ubus_context *ctx, struct ubus_object *obj,
-	      struct ubus_request_data *req, const char *method,
-	      struct blob_attr *msg)
+handle_reload(struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request_data *req,
+	      const char *method, struct blob_attr *msg)
 {
+	ovsd_log_msg(L_DEBUG, "call :: %s\n", __func__);
+
+	enum {
+		RELOAD_POLICY_OLD,
+		RELOAD_POLICY_NEW,
+		__RELOAD_MAX
+	};
+
+	static const struct blobmsg_policy pol[__RELOAD_MAX] = {
+		[RELOAD_POLICY_OLD] = { "old", BLOBMSG_TYPE_TABLE },
+		[RELOAD_POLICY_NEW] = { "new", BLOBMSG_TYPE_TABLE },
+	};
+
+	static const struct uci_blob_param_list cfg_params = {
+		.params = create_policy,
+		.n_params = __CREATPOL_MAX,
+	};
+
+	/* Config fields that make an on-the-fly reload impossible and require device re-creation */
+	static const unsigned long HARD_RELOAD_MASK =
+		(1 << CREATPOL_BRIDGE) | /* difference in bridge name */
+		(1 << CREATPOL_PARENT) | /* difference in parent bridge */
+		(1 << CREATPOL_VLAN);    /* difference in VLAN tag */
+
+	unsigned long diff;
 	int ret;
-	struct blob_attr *tb[__CREATPOL_MAX];
-	struct ovswitch_br_config ovs_cfg;
+	struct blob_attr *tb[__RELOAD_MAX], *tb_old[__CREATPOL_MAX], *tb_new[__CREATPOL_MAX];
+	struct ovswitch_br_config ovs_cfg_old, ovs_cfg_new;
 
-	ret = blobmsg_parse(create_policy, __CREATPOL_MAX, tb,
-		blobmsg_data(msg), blobmsg_len(msg));
+	ret = blobmsg_parse(pol, __RELOAD_MAX, tb, blobmsg_data(msg), blobmsg_len(msg));
+	if (ret || !tb[RELOAD_POLICY_OLD] || !tb[RELOAD_POLICY_NEW])
+		return UBUS_STATUS_INVALID_ARGUMENT;
+
+	ret = blobmsg_parse(create_policy, __CREATPOL_MAX, tb_old,
+		blobmsg_data(tb[RELOAD_POLICY_OLD]), blobmsg_len(tb[RELOAD_POLICY_OLD]));
+	ret |= blobmsg_parse(create_policy, __CREATPOL_MAX, tb_new,
+		blobmsg_data(tb[RELOAD_POLICY_NEW]), blobmsg_len(tb[RELOAD_POLICY_NEW]));
 	if (ret)
-		return ret;
+		return UBUS_STATUS_INVALID_ARGUMENT;
 
-	memset(&ovs_cfg, 0, sizeof(ovs_cfg));
+	diff = 0;
+	uci_blob_diff(tb_old, tb_new, &cfg_params, &diff);
+	if (!diff)
+		return UBUS_STATUS_OK;
 
-	ret = parse_create_msg(tb, &ovs_cfg);
-	if (ret)
-		return ret;
+	if (diff & HARD_RELOAD_MASK)
+		return UBUS_STATUS_NOT_SUPPORTED;
 
-	ovs_delete(ovs_cfg.name);
-	ret = ovs_create(&ovs_cfg);
+	memset(&ovs_cfg_old, 0, sizeof(ovs_cfg_old));
+	memset(&ovs_cfg_old, 0, sizeof(ovs_cfg_new));
 
-	if (ovs_cfg.ofcontrollers)
-		free(ovs_cfg.ofcontrollers);
+	ret = parse_create_msg(tb_old, &ovs_cfg_old);
+	ret |= parse_create_msg(tb_new, &ovs_cfg_new);
+	if (ret) {
+		ret = UBUS_STATUS_INVALID_ARGUMENT;
+		goto cleanup;
+	}
 
+	ret = ovs_reload(&ovs_cfg_new);
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
 
-	ovsd_log_msg(L_NOTICE, "Re-created ovs %s\n", ovs_cfg.name);
+	ovsd_log_msg(L_NOTICE, "Reloaded ovs %s\n", ovs_cfg_old.name);
 
-	return 0;
+cleanup:
+	if (ovs_cfg_old.ofcontrollers) free(ovs_cfg_old.ofcontrollers);
+	if (ovs_cfg_new.ofcontrollers) free(ovs_cfg_new.ofcontrollers);
+	if (ovs_cfg_old.ofproto) free(ovs_cfg_old.ofproto);
+	if (ovs_cfg_new.ofproto) free(ovs_cfg_new.ofproto);
+
+	return ret;
 }
 
 enum {

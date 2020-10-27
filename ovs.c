@@ -35,6 +35,12 @@ ovs_delete(char *bridge)
 }
 
 int
+ovs_reload(const struct ovswitch_br_config *cfg)
+{
+	return ovs_shell_reload_bridge(cfg);
+}
+
+int
 ovs_add_port(char *bridge, char *port)
 {
 	int ret = ovs_shell_add_port(bridge, port);

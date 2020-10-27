@@ -587,6 +587,67 @@ ovs_shell_create_bridge(struct ovswitch_br_config *cfg)
 }
 
 int
+ovs_shell_reload_bridge(const struct ovswitch_br_config *cfg)
+{
+	if (!ovs_shell_br_exists(cfg->name))
+		return OVSD_ENOEXIST;
+
+	size_t n_args = 2; /* program name and terminating NULL */
+
+	/* '-- set-fail-mode BRIDGE MODE' */
+	n_args += 4;
+
+	/* '-- set-controller BRIDGE CTL_1 ... CTL_n' */
+	if (cfg->n_ofcontrollers)
+		n_args += 3 + cfg->n_ofcontrollers;
+
+	/* '-- set-ssl PRIVKEY CERT CACERT' */
+	if (cfg->ssl.privkey_file && cfg->ssl.cert_file && cfg->ssl.cacert_file)
+		n_args += 5;
+
+	/* '-- set bridge BRIDGE OFPROTO'*/
+	if (cfg->ofproto)
+		n_args += 5;
+
+	char *argv[n_args];
+	size_t arg = 0;
+
+	argv[arg++] = OVS_VSCTL;
+	argv[arg++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+	argv[arg++] = ovs_cmd(CMD_SET_FAIL_MODE);
+	argv[arg++] = cfg->name;
+	argv[arg++] = cfg->fail_mode == OVS_FAIL_MODE_STANDALONE ? "standalone" : "secure";
+
+	if (cfg->n_ofcontrollers) {
+		argv[arg++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+		argv[arg++] = ovs_cmd(CMD_SET_OFCTL);
+		argv[arg++] = cfg->name;
+		for (size_t i = 0; i < cfg->n_ofcontrollers; i++)
+			argv[arg++] = cfg->ofcontrollers[i];
+	}
+
+	if (cfg->ssl.privkey_file) {
+		argv[arg++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+		argv[arg++] = ovs_cmd(CMD_SET_SSL);
+		argv[arg++] = cfg->ssl.privkey_file;
+		argv[arg++] = cfg->ssl.cert_file;
+		argv[arg++] = cfg->ssl.cacert_file;
+	}
+
+	if (cfg->ofproto) {
+		argv[arg++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+		argv[arg++] = ovs_cmd(CMD_SET_TBL);
+		argv[arg++] = ovs_cmd(TABLE_BRIDGE);
+		argv[arg++] = cfg->name;
+		argv[arg++] = cfg->ofproto;
+	}
+
+	argv[arg] = NULL;
+
+	return ovs_vsctl(argv);
+}
+
+int
 ovs_shell_delete_bridge(char *bridge)
 {
 	if (!ovs_shell_br_exists(bridge))

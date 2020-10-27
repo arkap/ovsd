@@ -76,6 +76,7 @@ bool ovs_shell_br_exists(char *name);
 int ovs_shell_br_to_vlan(char *bridge);
 size_t ovs_shell_br_to_parent(char *br, char *buf, size_t n);
 int ovs_shell_create_bridge(struct ovswitch_br_config *cfg);
+int ovs_shell_reload_bridge(const struct ovswitch_br_config *cfg);
 int ovs_shell_delete_bridge(char *bridge);
 int ovs_shell_add_port(char *bridge, char *port);
 int ovs_shell_remove_port(char *bridge, char *port);
