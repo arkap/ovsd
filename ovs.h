@@ -17,8 +17,8 @@
 #include "ovsd.h"
 
 int ovs_delete(char *bridge);
-int ovs_create(struct ovswitch_br_config *cfg);
-int ovs_reload(const struct ovswitch_br_config *cfg);
+int ovs_create(struct ovs_config *cfg);
+int ovs_reload(const struct ovs_config *cfg);
 
 int ovs_add_port(char *bridge, char *port);
 int ovs_remove_port(char *bridge, char *port);

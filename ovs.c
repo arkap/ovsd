@@ -17,7 +17,7 @@
 #include "ovs-shell.h"
 
 int
-ovs_create(struct ovswitch_br_config *cfg)
+ovs_create(struct ovs_config *cfg)
 {
 	int ret = ovs_shell_create_bridge(cfg);
 
@@ -35,7 +35,7 @@ ovs_delete(char *bridge)
 }
 
 int
-ovs_reload(const struct ovswitch_br_config *cfg)
+ovs_reload(const struct ovs_config *cfg)
 {
 	return ovs_shell_reload_bridge(cfg);
 }

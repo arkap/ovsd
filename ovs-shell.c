@@ -457,7 +457,7 @@ ovs_shell_br_to_parent(char *br, char *buf, size_t n)
 }
 
 int
-ovs_shell_create_bridge(struct ovswitch_br_config *cfg)
+ovs_shell_create_bridge(struct ovs_config *cfg)
 {
 	bool fake_br = false;
 	size_t nargs = 2;	/* program name and terminating NULL */
@@ -587,7 +587,7 @@ ovs_shell_create_bridge(struct ovswitch_br_config *cfg)
 }
 
 int
-ovs_shell_reload_bridge(const struct ovswitch_br_config *cfg)
+ovs_shell_reload_bridge(const struct ovs_config *cfg)
 {
 	if (!ovs_shell_br_exists(cfg->name))
 		return OVSD_ENOEXIST;

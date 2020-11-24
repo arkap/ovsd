@@ -293,7 +293,7 @@ parse_error:
 }
 
 static int
-parse_ofcontroller_opts(struct blob_attr **tb, struct ovswitch_br_config *cfg)
+parse_controller_fail_mode(struct blob_attr **tb, struct ovs_config *cfg)
 {
 	const char *s;
 
@@ -322,7 +322,7 @@ parse_ofcontroller_opts(struct blob_attr **tb, struct ovswitch_br_config *cfg)
 }
 
 static int
-parse_ofproto_opts(struct blob_attr **tb, struct ovswitch_br_config *cfg)
+parse_ofcontroller(struct blob_attr **tb, struct ovs_config *cfg)
 {
 	static const size_t ofp_len = strlen("OpenFlow1x,");
 	static const size_t proto_len = strlen("protocols=");
@@ -361,7 +361,7 @@ error:
 }
 
 static int
-parse_ssl_opts(struct blob_attr **tb, struct ovswitch_br_config *cfg)
+parse_ssl(struct blob_attr **tb, struct ovs_config *cfg)
 {
 	char *s, **arr;
 	size_t n;
@@ -408,7 +408,7 @@ parse_ssl_opts(struct blob_attr **tb, struct ovswitch_br_config *cfg)
 }
 
 static int
-parse_create_msg(struct blob_attr **tb, struct ovswitch_br_config *cfg)
+parse_create_msg(struct blob_attr **tb, struct ovs_config *cfg)
 {
 	if (!tb[CREATPOL_BRIDGE])
 		return UBUS_STATUS_INVALID_ARGUMENT;
@@ -436,7 +436,7 @@ handle_create(struct ubus_context *ctx, struct ubus_object *obj,
 			  struct blob_attr *msg)
 {
 	struct blob_attr *tb[__CREATPOL_MAX];
-	struct ovswitch_br_config ovs_cfg;
+	struct ovs_config ovs_cfg;
 	int ret;
 
 	ret = blobmsg_parse(create_policy, __CREATPOL_MAX, tb, blob_data(msg),
@@ -496,7 +496,7 @@ handle_reload(struct ubus_context *ctx, struct ubus_object *obj, struct ubus_req
 	unsigned long diff;
 	int ret;
 	struct blob_attr *tb[__RELOAD_MAX], *tb_old[__CREATPOL_MAX], *tb_new[__CREATPOL_MAX];
-	struct ovswitch_br_config ovs_cfg_old, ovs_cfg_new;
+	struct ovs_config ovs_cfg;
 
 	ret = blobmsg_parse(pol, __RELOAD_MAX, tb, blobmsg_data(msg), blobmsg_len(msg));
 	if (ret || !tb[RELOAD_POLICY_OLD] || !tb[RELOAD_POLICY_NEW])

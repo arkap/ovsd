@@ -49,7 +49,7 @@ struct ssl_config {
 	size_t n_ciphers;
 };
 
-struct ovswitch_br_config {
+struct ovs_config {
 	char *name;
 
 	/* fake bridge args */
