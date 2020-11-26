@@ -488,7 +488,7 @@ handle_create(struct ubus_context *ctx, struct ubus_object *obj,
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
 
-	ovsd_log_msg(L_NOTICE, "Created ovs %s\n", ovs_cfg.name);
+	ovsd_log_msg(L_NOTICE, "created ovs %s\n", ovs_cfg.name);
 
 	return 0;
 }
@@ -497,8 +497,6 @@ static int
 handle_reload(struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request_data *req,
 	      const char *method, struct blob_attr *msg)
 {
-	ovsd_log_msg(L_DEBUG, "call :: %s\n", __func__);
-
 	enum {
 		RELOAD_POLICY_OLD,
 		RELOAD_POLICY_NEW,
@@ -698,7 +696,7 @@ handle_hotplug_add(struct ubus_context *ctx, struct ubus_object *obj,
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
 
-	ovsd_log_msg(L_NOTICE, "ovs '%s': new port '%s'\n", bridge, port);
+	ovsd_log_msg(L_NOTICE, "%s: new port '%s'\n", bridge, port);
 
 	return 0;
 }
@@ -735,7 +733,7 @@ handle_hotplug_remove(struct ubus_context *ctx, struct ubus_object *obj,
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
 
-	ovsd_log_msg(L_NOTICE, "ovs '%s': removed port '%'\n", bridge, port);
+	ovsd_log_msg(L_NOTICE, "%s: removed port '%'\n", bridge, port);
 
 	return 0;
 }
