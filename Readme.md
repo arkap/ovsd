@@ -34,7 +34,7 @@ config interface 'lan'
 ```
  - `ofcontrollers` - set an OpenFlow controller
  - `controller_fail_mode` - fall-back behavior in case of controller unavailability. `standalone` means learning switch behavior. `secure` (the default) disables the installation of new flow rules.
- - `ofproto` - set the OpenFlow protocol versions that aare permitted on the control channel.
+ - `ofproto` - set the OpenFlow protocol versions that are permitted on the control channel.
 
 ### Encrpytion
 The following example demonstrates how to configure encryption for the control channel:
@@ -74,10 +74,6 @@ This will result in the creation of two Open vSwitch bridges: `ovs-lan` and `ovs
  - `vlan` - 802.1q VLAN tag for the fake-bridge. To create a fake bridge both the parent and VLAN options must be given.
 
 Notice the option `empty` within the scope of `ovs-lan`. Since it does not list any `ifname`s, this ensures the bridge gets created even if it does not have members.
-
-## Contact
-
-Please post to the Google group [ovsd-dev](https://groups.google.com/forum/#!forum/ovsd-dev) if you have problems with or suggestions for ovsd.
 
 ## Acknowledgements
 
