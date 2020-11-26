@@ -161,26 +161,25 @@ enum {
 	CREATPOL_SSLPRIVKEY,
 	CREATPOL_SSLCERT,
 	CREATPOL_SSLCACERT,
-	CREATPOL_BOOTSTRAP_SSLCACERT,
+	CREATPOL_SSLBOOTSTRAP,
 	CREATPOL_SSLPROTO,
 	CREATPOL_SSLCIPHERS,
 	CREATPOL_OFPROTO,
 	__CREATPOL_MAX
 };
 static const struct blobmsg_policy create_policy[__CREATPOL_MAX] = {
-	[CREATPOL_BRIDGE] = { "name", BLOBMSG_TYPE_STRING },
-	[CREATPOL_PARENT] = { "parent", BLOBMSG_TYPE_STRING },
-	[CREATPOL_VLAN] = { "vlan", BLOBMSG_TYPE_INT32 },
+	[CREATPOL_BRIDGE]        = { "name", BLOBMSG_TYPE_STRING },
+	[CREATPOL_PARENT]        = { "parent", BLOBMSG_TYPE_STRING },
+	[CREATPOL_VLAN]          = { "vlan", BLOBMSG_TYPE_INT32 },
 	[CREATPOL_OFCONTROLLERS] = { "ofcontrollers", BLOBMSG_TYPE_ARRAY },
-	[CREATPOL_FAILMODE] = { "controller_fail_mode", BLOBMSG_TYPE_STRING },
-	[CREATPOL_OFPROTO] = { "ofproto", BLOBMSG_TYPE_ARRAY },
-	[CREATPOL_SSLPRIVKEY] = { "ssl_private_key", BLOBMSG_TYPE_STRING },
-	[CREATPOL_SSLCERT] = { "ssl_cert", BLOBMSG_TYPE_STRING },
-	[CREATPOL_SSLCACERT] = { "ssl_ca_cert", BLOBMSG_TYPE_STRING },
-	[CREATPOL_BOOTSTRAP_SSLCACERT] =
-			{ "ssl_bootstrap_ca_cert",BLOBMSG_TYPE_STRING },
-	[CREATPOL_SSLPROTO] = { "ssl_proto", BLOBMSG_TYPE_ARRAY },
-	[CREATPOL_SSLCIPHERS] = { "ssl_ciphers", BLOBMSG_TYPE_ARRAY },
+	[CREATPOL_FAILMODE]      = { "controller_fail_mode", BLOBMSG_TYPE_STRING },
+	[CREATPOL_OFPROTO]       = { "ofproto", BLOBMSG_TYPE_ARRAY },
+	[CREATPOL_SSLPRIVKEY]    = { "ssl_private_key", BLOBMSG_TYPE_STRING },
+	[CREATPOL_SSLCERT]       = { "ssl_cert", BLOBMSG_TYPE_STRING },
+	[CREATPOL_SSLCACERT]     = { "ssl_ca_cert", BLOBMSG_TYPE_STRING },
+	[CREATPOL_SSLBOOTSTRAP]  = { "ssl_bootstrap",BLOBMSG_TYPE_BOOL },
+	[CREATPOL_SSLPROTO]      = { "ssl_proto", BLOBMSG_TYPE_ARRAY },
+	[CREATPOL_SSLCIPHERS]    = { "ssl_ciphers", BLOBMSG_TYPE_ARRAY },
 };
 
 enum {
@@ -297,15 +296,6 @@ parse_controller_fail_mode(struct blob_attr **tb, struct ovs_config *cfg)
 {
 	const char *s;
 
-	if (!tb[CREATPOL_OFCONTROLLERS])
-		return 0;
-
-	cfg->ofcontrollers = _parse_strarray(tb[CREATPOL_OFCONTROLLERS],
-		&cfg->n_ofcontrollers);
-
-	if (!cfg->ofcontrollers)
-		return -1;
-
 	if (tb[CREATPOL_FAILMODE]) {
 		s = blobmsg_get_string(tb[CREATPOL_FAILMODE]);
 		if (!strcmp(s, "standalone"))
@@ -323,6 +313,21 @@ parse_controller_fail_mode(struct blob_attr **tb, struct ovs_config *cfg)
 
 static int
 parse_ofcontroller(struct blob_attr **tb, struct ovs_config *cfg)
+{
+	if (!tb[CREATPOL_OFCONTROLLERS])
+		return 0;
+
+	cfg->ofcontrollers = _parse_strarray(tb[CREATPOL_OFCONTROLLERS],
+		&cfg->n_ofcontrollers);
+
+	if (!cfg->ofcontrollers)
+		return -1;
+
+	return 0;
+}
+
+static int
+parse_ofproto(struct blob_attr **tb, struct ovs_config *cfg)
 {
 	static const size_t ofp_len = strlen("OpenFlow1x,");
 	static const size_t proto_len = strlen("protocols=");
@@ -376,17 +381,12 @@ parse_ssl(struct blob_attr **tb, struct ovs_config *cfg)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 	cfg->ssl.cert_file = s;
 
-	if (tb[CREATPOL_SSLCACERT]) {
-		s = blobmsg_get_string(tb[CREATPOL_SSLCACERT]);
-		cfg->ssl.bootstrap = false;
-	} else if (tb[CREATPOL_BOOTSTRAP_SSLCACERT]) {
-		s = blobmsg_get_string(tb[CREATPOL_BOOTSTRAP_SSLCACERT]);
-		cfg->ssl.bootstrap = true;
-	} else {
-		return -1;
-	}
-
+	s = blobmsg_get_string(tb[CREATPOL_SSLCACERT]);
+	if (!s)
+		return UBUS_STATUS_INVALID_ARGUMENT;
 	cfg->ssl.cacert_file = s;
+	cfg->ssl.bootstrap = tb[CREATPOL_SSLBOOTSTRAP] &&
+		blobmsg_get_bool(tb[CREATPOL_SSLBOOTSTRAP]);
 
 	if (tb[CREATPOL_SSLPROTO]) {
 		arr = _parse_strarray(tb[CREATPOL_SSLPROTO], &n);
@@ -419,13 +419,41 @@ parse_create_msg(struct blob_attr **tb, struct ovs_config *cfg)
 		cfg->vlan_tag = blobmsg_get_u32(tb[CREATPOL_VLAN]);
 	}
 
-	if (tb[CREATPOL_SSLPRIVKEY] && tb[CREATPOL_SSLCERT])
-		parse_ssl_opts(tb, cfg);
+	if (tb[CREATPOL_SSLPRIVKEY] && tb[CREATPOL_SSLCERT] && tb[CREATPOL_SSLCACERT])
+		parse_ssl(tb, cfg);
 
-	parse_ofcontroller_opts(tb, cfg);
+	parse_controller_fail_mode(tb, cfg);
+	parse_ofcontroller(tb, cfg);
 
 	if (tb[CREATPOL_OFPROTO])
-		parse_ofproto_opts(tb, cfg);
+		parse_ofproto(tb, cfg);
+
+	return 0;
+}
+
+static int
+parse_reload_msg(struct blob_attr **tb, struct ovs_config *cfg, unsigned long diff)
+{
+	static const unsigned long SSL_MASK = (1 << CREATPOL_SSLPRIVKEY) &
+					      (1 << CREATPOL_SSLCERT) &
+					      (1 << CREATPOL_SSLCACERT);
+
+	if (!tb[CREATPOL_BRIDGE])
+		return UBUS_STATUS_INVALID_ARGUMENT;
+	cfg->name = blobmsg_get_string(tb[CREATPOL_BRIDGE]);
+
+	if ((diff & SSL_MASK) &&
+			(tb[CREATPOL_SSLPRIVKEY] && tb[CREATPOL_SSLCERT] && tb[CREATPOL_SSLCACERT]))
+		parse_ssl(tb, cfg);
+
+	if((diff & (1 << CREATPOL_FAILMODE)) && tb[CREATPOL_FAILMODE])
+		parse_controller_fail_mode(tb, cfg);
+
+	if ((diff & (1 << CREATPOL_OFCONTROLLERS)) && tb[CREATPOL_OFCONTROLLERS])
+		parse_ofcontroller(tb, cfg);
+
+	if ((diff & (1 << CREATPOL_OFPROTO)) && tb[CREATPOL_OFPROTO])
+		parse_ofproto(tb, cfg);
 
 	return 0;
 }
@@ -511,33 +539,30 @@ handle_reload(struct ubus_context *ctx, struct ubus_object *obj, struct ubus_req
 
 	diff = 0;
 	uci_blob_diff(tb_old, tb_new, &cfg_params, &diff);
+
 	if (!diff)
 		return UBUS_STATUS_OK;
 
 	if (diff & HARD_RELOAD_MASK)
 		return UBUS_STATUS_NOT_SUPPORTED;
 
-	memset(&ovs_cfg_old, 0, sizeof(ovs_cfg_old));
-	memset(&ovs_cfg_old, 0, sizeof(ovs_cfg_new));
+	memset(&ovs_cfg, 0, sizeof(ovs_cfg));
 
-	ret = parse_create_msg(tb_old, &ovs_cfg_old);
-	ret |= parse_create_msg(tb_new, &ovs_cfg_new);
+	ret = parse_reload_msg(tb_new, &ovs_cfg, diff);
 	if (ret) {
 		ret = UBUS_STATUS_INVALID_ARGUMENT;
 		goto cleanup;
 	}
 
-	ret = ovs_reload(&ovs_cfg_new);
+	ret = ovs_reload(&ovs_cfg);
 	if (ret)
 		return _ovs_error_to_ubus_error(ret);
 
-	ovsd_log_msg(L_NOTICE, "Reloaded ovs %s\n", ovs_cfg_old.name);
+	ovsd_log_msg(L_NOTICE, "reloaded ovs %s\n", ovs_cfg.name);
 
 cleanup:
-	if (ovs_cfg_old.ofcontrollers) free(ovs_cfg_old.ofcontrollers);
-	if (ovs_cfg_new.ofcontrollers) free(ovs_cfg_new.ofcontrollers);
-	if (ovs_cfg_old.ofproto) free(ovs_cfg_old.ofproto);
-	if (ovs_cfg_new.ofproto) free(ovs_cfg_new.ofproto);
+	if (ovs_cfg.ofcontrollers) free(ovs_cfg.ofcontrollers);
+	if (ovs_cfg.ofproto) free(ovs_cfg.ofproto);
 
 	return ret;
 }

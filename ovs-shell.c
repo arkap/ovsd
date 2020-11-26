@@ -463,8 +463,15 @@ ovs_shell_create_bridge(struct ovs_config *cfg)
 	size_t nargs = 2;	/* program name and terminating NULL */
 	size_t cur;
 
-	/* 1: add-br 2: --may-exist 3: br-name */
-	nargs += 3;
+	/* 7 arguments:
+	 * add-br
+	 * --may-exist
+	 * br-name
+	 * separator
+	 * set-fail-mode
+	 * bridge
+	 * fail-mode */
+	nargs += 7;
 
 	/* in case of fake bridge, check args */
 	if (cfg->parent && (cfg->vlan_tag >= 0)) {
@@ -484,27 +491,21 @@ ovs_shell_create_bridge(struct ovs_config *cfg)
 
 	/* 1: atomic cmd separator, 2: set-controller cmd,
 	 * 3: bridge, 4...: controllers */
-	if (!fake_br && cfg->ofcontrollers) {
+	if (!fake_br && cfg->ofcontrollers)
 		nargs += 3 + cfg->n_ofcontrollers;
-		/* 1: separator
-		 * 2: set-fail-mode
-		 * 3: bridge
-		 * 4: fail-mode */
-		nargs += 4;
 
-		/* SSL options: 5 or 6 options
-		 * separator
-		 * (--bootstrap)
-		 * set-ssl
-		 * private key
-		 * cert
-		 * CA cert */
-		if (cfg->ssl.privkey_file) {
-			if (cfg->ssl.bootstrap)
-				nargs += 6;
-			else
-				nargs += 5;
-		}
+	/* SSL options: 5 or 6 options
+	 * separator
+	 * (--bootstrap)
+	 * set-ssl
+	 * private key
+	 * cert
+	 * CA cert */
+	if (cfg->ssl.privkey_file) {
+		if (cfg->ssl.bootstrap)
+			nargs += 6;
+		else
+			nargs += 5;
 	}
 
 	/* 1: atomic cmd separator
@@ -542,43 +543,39 @@ ovs_shell_create_bridge(struct ovs_config *cfg)
 		argv[cur++] = cfg->name;
 		for (int i = 0; i < cfg->n_ofcontrollers; i++)
 			argv[cur++] = cfg->ofcontrollers[i];
+	}
 
-		/* fail mode in case of OF controller unavailability */
-		switch (cfg->fail_mode) {
-			case OVS_FAIL_MODE_SECURE:
-				argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
-				argv[cur++] = ovs_cmd(CMD_SET_FAIL_MODE);
-				argv[cur++] = cfg->name;
-				argv[cur++] = "secure";
-				break;
-			case OVS_FAIL_MODE_STANDALONE:
-				argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
-				argv[cur++] = ovs_cmd(CMD_SET_FAIL_MODE);
-				argv[cur++] = cfg->name;
-				argv[cur++] = "standalone";
-				break;
-			default: break;
-		}
+	/* fail mode in case of OF controller unavailability */
+	if (cfg->fail_mode == OVS_FAIL_MODE_STANDALONE) {
+		argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+		argv[cur++] = ovs_cmd(CMD_SET_FAIL_MODE);
+		argv[cur++] = cfg->name;
+		argv[cur++] = "standalone";
+	} else {
+		argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+		argv[cur++] = ovs_cmd(CMD_SET_FAIL_MODE);
+		argv[cur++] = cfg->name;
+		argv[cur++] = "secure";
+	}
 
-		/* SSL options */
-		if (cfg->ssl.privkey_file) {
-			argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
-			if (cfg->ssl.bootstrap)
-				argv[cur++] = ovs_cmd(OPT_SSL_BOOTSTRAP);
-			argv[cur++] = ovs_cmd(CMD_SET_SSL);
-			argv[cur++] = cfg->ssl.privkey_file;
-			argv[cur++] = cfg->ssl.cert_file;
-			argv[cur++] = cfg->ssl.cacert_file;
-		}
+	/* SSL options */
+	if (cfg->ssl.privkey_file) {
+		argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+		if (cfg->ssl.bootstrap)
+			argv[cur++] = ovs_cmd(OPT_SSL_BOOTSTRAP);
+		argv[cur++] = ovs_cmd(CMD_SET_SSL);
+		argv[cur++] = cfg->ssl.privkey_file;
+		argv[cur++] = cfg->ssl.cert_file;
+		argv[cur++] = cfg->ssl.cacert_file;
+	}
 
-		/* OpenFlow protocol version */
-		if (cfg->ofproto) {
-			argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
-			argv[cur++] = ovs_cmd(CMD_SET_TBL);
-			argv[cur++] = "bridge";
-			argv[cur++] = cfg->name;
-			argv[cur++] = cfg->ofproto;
-		}
+	/* OpenFlow protocol version */
+	if (cfg->ofproto) {
+		argv[cur++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
+		argv[cur++] = ovs_cmd(CMD_SET_TBL);
+		argv[cur++] = "bridge";
+		argv[cur++] = cfg->name;
+		argv[cur++] = cfg->ofproto;
 	}
 
 	argv[cur] = NULL;
@@ -637,7 +634,7 @@ ovs_shell_reload_bridge(const struct ovs_config *cfg)
 	if (cfg->ofproto) {
 		argv[arg++] = ovs_cmd(ATOMIC_CMD_SEPARATOR);
 		argv[arg++] = ovs_cmd(CMD_SET_TBL);
-		argv[arg++] = ovs_cmd(TABLE_BRIDGE);
+		argv[arg++] = ovs_table[TABLE_BRIDGE];
 		argv[arg++] = cfg->name;
 		argv[arg++] = cfg->ofproto;
 	}
