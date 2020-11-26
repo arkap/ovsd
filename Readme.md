@@ -1,13 +1,12 @@
 # ovsd
 
-ovsd is an external device handler for Open vSwitch devices in conjunction with OpenWrt's netifd.
-It integrates Open vSwitch configuration into the UCI configuration file `/etc/config/network`.
-Using the external device handler extension for netifd, it receives commands to create and configure Open vSwitch devices from netifd and relays them to the Open vSwitch software using the `ovs-vsctl` command-line interface.
+ovsd is an external device handler enabling native UCI configuration of Open vSwitch on OpenWrt systems.
+It interacts with OpenWrt's netifd to allow configuration through the familiar UCI file at `/etc/config/network`.
+Using the external device handler extension for netifd, it relays commands to the `ovs-vsctl` command-line interface for Open vSwitch.
 
 ## Installation
 
-
-Install this as a feed by adding the following line to `feeds.conf` in your OpenWRT source tree
+Install this as a feed by adding the following line to `feeds.conf` in your OpenWrt source tree
 ```
 src-git sdwn git@gitlab.hhi.fraunhofer.de:wn-ina/sdwn-feed.git
 ```
@@ -20,49 +19,61 @@ There should now be a submenu called `SDWN` under `Network` when you run
 
 ## Configuration
 
-This example configuration demonstrates all the options ovsd understands:
+### Basic
+The following example creates an Open vSwitch bridge called `ovs-lan` with the interfaces `eth1` and `eth2`:
+
+```bash
+# /etc/config/network
+config interface 'lan'
+	option type 'ovs'
+	option ifname 'eth1 eth2'
+	option proto 'dhcp'
+	option ofcontrollers 'tcp:1.2.3.4:5678'
+	option controller_fail_mode 'standalone'
+	option ofproto '13 14'
+```
+ - `ofcontrollers` - set an OpenFlow controller
+ - `controller_fail_mode` - fall-back behavior in case of controller unavailability. `standalone` means learning switch behavior. `secure` (the default) disables the installation of new flow rules.
+ - `ofproto` - set the OpenFlow protocol versions that aare permitted on the control channel.
+
+### Encrpytion
+The following example demonstrates how to configure encryption for the control channel:
+
+```bash
+# /etc/config/network
+config interface 'lan'
+	...
+	option ssl_cert '/path/to/cert'
+	option ssl_private_key '/path/to/private_key'
+	option ssl_ca_cert '/path/to/ca_cert'
+	option ssl_bootstrap 'true'
+```
+ - `ssl_cert`, `ssl_private_key`, and `ssl_ca_cert` set the certificate, private ke, and CA certificate, respectively. All of them must be given to use encryption.
+ - `ssl_bootstrap` is an optional boolean flag enabling a trust-on-first-use connection to the controller to retrieve the CA certificate.
+
+### VLANs
+The following example demonstrates how to configure VLANs with ovsd:
 
 ```bash
 # /etc/config/network
 
 config interface 'lan'
 	option type 'ovs'
-	option ifname 'eth0 eth1 eth2'
-	option proto 'static'
-	option ipaddr '172.17.1.123'
-	option gateway '172.17.1.1'
-	option netmask '255.255.255.0'
-	option ip6assign '60'
+	option proto 'dhcp'
+	option empty 'true'
 	option ofcontrollers 'tcp:1.2.3.4:5678'
-	option controller_fail_mode 'standalone'
-	option ofproto '13 14'
-	option ssl_cert '/root/cert.pem'
-	option ssl_private_key '/root/key.pem'
-	option ssl_ca_cert '/root/cacert_bootstrap.pem'
-	option ssl_bootstrap 'true'
 
-config interface 'fake'
+config interface 'vlan100'
 	option type 'ovs'
 	option ifname 'eth1 eth2'
-	option proto 'static'
-	option ipaddr '172.17.1.124'
-	option netmask '255.255.255.0'
 	option parent 'ovs-lan'
-	option vlan '2'
-	option empty 'true'
+	option vlan '100'
 ```
-This will result in the creation of two Open vSwitch bridges: `ovs-lan` and `ovs-fake`.
+This will result in the creation of two Open vSwitch bridges: `ovs-lan` and `ovs-vlan100`. `ifname`s listed within the scope of `vlan100` will become members of the VLAN 100.
+ - `parent`- is the name of an Open vSwitch bridge. Setting this makes the bridge a fake-bridge or pseudo-bridge created on top of the parent bridge. Note, that you'll have to add the prefix `ovs-` to the parent bridge's name.
+ - `vlan` - 802.1q VLAN tag for the fake-bridge. To create a fake bridge both the parent and VLAN options must be given.
 
-### Config Options
- - `ofcontrollers`: a list of strings setting the bridge's OpenFlow controllers. Please refer to the [ovs-vsctl manpage](http://manpages.ubuntu.com/manpages/trusty/man8/ovs-vsctl.8.html) for the exact format of the addresses.
- - `ofproto`: Optional list of OpenFlow protocol versions to allow. Valid options are `10`, `11`, `12`, `13`, `14`, and `15`.
- - `controller_fail_mode`: Can be one of two options, `standalone` or `secure`. Standalone makes the bridge fall back to standard learning switch behavior in case of controller failure. Secure disables the installation of new flows while the controller is disconnected. Defaults to `secure`.
- - `ssl_cert`, `ssl_private_key`, `ssl_ca_cert`: paths to PEM files containing an SSL certificate, SSL private key and CA certificate, respectively. To enable transport layer encryption, all three options must be given.
- - `ssl_bootstrap`: optional boolean flag enabling a trust-on-first-use controller connection to retrieve the CA cert. This facilitates setup but is vulnerable to man-in-the-middle attacks. Please refer to the [ovs-vsctl manpage](http://manpages.ubuntu.com/manpages/trusty/man8/ovs-vsctl.8.html) for further detail.
-
-`ovs-fake` has some other options set:
-- `parent`: Name of another non-fake Open vSwitch bridge. Setting this makes the bridge a fake-bridge or pseudo-bridge created on top of the parent bridge. Note, that you'll have to add the prefix `ovs-` to the parent bridge's name.
-- `vlan`: 802.1q VLAN tag for the fake-bridge. To create a fake bridge both the parent and VLAN options must be given.
+Notice the option `empty` within the scope of `ovs-lan`. Since it does not list any `ifname`s, this ensures the bridge gets created even if it does not have members.
 
 ## Contact
 
