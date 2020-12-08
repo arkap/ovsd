@@ -598,9 +598,9 @@ ovs_shell_reload_bridge(const struct ovs_config *cfg)
 	if (cfg->n_ofcontrollers)
 		n_args += 3 + cfg->n_ofcontrollers;
 
-	/* '-- set-ssl PRIVKEY CERT CACERT' */
+	/* '-- (--bootstrap) set-ssl PRIVKEY CERT CACERT' */
 	if (cfg->ssl.privkey_file && cfg->ssl.cert_file && cfg->ssl.cacert_file)
-		n_args += 5;
+		n_args += 5 + (cfg->ssl.bootstrap ? 1 : 0);
 
 	/* '-- set bridge BRIDGE OFPROTO'*/
 	if (cfg->ofproto)
