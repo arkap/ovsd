@@ -8,14 +8,13 @@ Using the external device handler extension for netifd, it relays commands to th
 
 Install this as a feed by adding the following line to `feeds.conf` in your OpenWrt source tree
 ```
-src-git sdwn git@gitlab.hhi.fraunhofer.de:wn-ina/sdwn-feed.git
+src-git ovsd https://github.com/arkap/package-ovsd.git
 ```
 and running
 ```bash
 scripts/feeds update sdwn && scripts/feeds install ovsd
 ```
-There should now be a submenu called `SDWN` under `Network` when you run
-`make menuconfig` where you can select `ovsd`.
+`ovsd` should now appear in the `Network` submenu when you run `make menuconfig`.
 
 ## Configuration
 
